@@ -7,7 +7,7 @@ import requests
 # ---------------------------------------------------------
 # 1. CONFIGURACIÓN Y CREDENCIALES (Leyendo desde Railway de forma segura)
 # ---------------------------------------------------------
-ODDS_API_KEY = os.environ.get("c560cbe530882b498611c3ea453bcf70")
+ODDS_API_KEY = ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
 TELEGRAM_TOKEN = "8808039850:AAEXLka-1dtmfDrhRqS9MPb0aAJ0Ez9bzQA"
 TELEGRAM_CHAT_ID = "5098093220"
 
