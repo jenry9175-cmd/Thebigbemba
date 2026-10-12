@@ -5,9 +5,9 @@ from datetime import datetime
 import requests
 
 # ---------------------------------------------------------
-# 1. CONFIGURACIÓN Y CREDENCIALES
+# 1. CONFIGURACIÓN Y CREDENCIALES (Leyendo desde Railway de forma segura)
 # ---------------------------------------------------------
-ODDS_API_KEY = "a7ccad2b3f9e6f13d78e457be9ced0f6"
+ODDS_API_KEY = os.environ.get("c560cbe530882b498611c3ea453bcf70")
 TELEGRAM_TOKEN = "8808039850:AAEXLka-1dtmfDrhRqS9MPb0aAJ0Ez9bzQA"
 TELEGRAM_CHAT_ID = "5098093220"
 
