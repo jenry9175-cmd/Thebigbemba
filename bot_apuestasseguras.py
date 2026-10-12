@@ -104,7 +104,7 @@ def enviar_alerta_telegram(mensaje):
 
 
 # ---------------------------------------------------------
-# 4. ESCÁNER PRINCIPAL CON VALIDACIÓN ESTRICTA DE HÁNDICAPS
+# 4. ESCÁNER PRINCIPAL CON VALIDACIONES RIGUROSAS
 # ---------------------------------------------------------
 def escanear_todos_los_deportes():
     ahora = time.time()
@@ -144,8 +144,6 @@ def escanear_todos_los_deportes():
             fecha_cruda = evento.get("commence_time", "")
             fecha_evento = formatear_fecha(fecha_cruda)
 
-            # Estructura para almacenar por casa y mercado de forma limpia
-            # Para spreads, guardaremos por cada bookmaker sus selecciones exactas para asegurar consistencia
             bookmakers_datos = {}
 
             for bookmaker in evento.get("bookmakers", []):
@@ -173,13 +171,10 @@ def escanear_todos_los_deportes():
                             "punto": punto
                         }
 
-            # Ahora analizaremos mercado por mercado buscando las mejores cuotas cruzadas entre casas distintas
-            # Agruparemos por tipo de mercado (h2h, totals, spreads)
             mercados_globales = {}
 
             for casa, mercados in bookmakers_datos.items():
                 for m_key, selecciones in mercados.items():
-                    # Si es spreads o totals, necesitamos verificar el valor del punto
                     for nombre, info in selecciones.items():
                         punto = info["punto"]
                         cuota = info["cuota"]
@@ -205,18 +200,16 @@ def escanear_todos_los_deportes():
                     casas_lista = [datos["casa"] for datos in opciones.values()]
                     puntos_lista = [datos["punto"] for datos in opciones.values()]
 
-                    # 1. Validar que las casas sean distintas
+                    # Validar casas distintas
                     if len(set(casas_lista)) == 1:
                         continue
 
-                    # 2. VALIDACIÓN ESTRICTA PARA SPREADS (HÁNDICAPS)
-                    # Si es un mercado de hándicap, la suma de los puntos debe ser 0 (ej: -1.5 y +1.5)
-                    # Si tienen el mismo signo (ej: dos negativos o dos positivos), se descarta de inmediato.
+                    # Validar hándicaps (spreads) estrictos
                     if "spreads" in clave_mercado.lower():
                         puntos_validos = [p for p in puntos_lista if p is not None]
                         if len(puntos_validos) == 2:
                             if sum(puntos_validos) != 0:
-                                continue # ¡Evita hándicaps absurdos como dos -1.5!
+                                continue
 
                     es_surebet, suma_imp, margen_teorico = calcular_surebet(cuotas_lista)
 
@@ -254,10 +247,10 @@ def escanear_todos_los_deportes():
 
 
 # ---------------------------------------------------------
-# 5. BUCLE DE EJECUCIÓN
+# 5. BUCLE DE EJECUCIÓN 24/7
 # ---------------------------------------------------------
 if __name__ == "__main__":
-    print("🤖 Bot operativo (Con filtro anti-hándicaps absurdos activo).")
+    print("🤖 Bot en la nube operativo y listo.")
     print(f"🎯 Margen mínimo: {MARGEN_MINIMO_PORCENTAJE}% | Anti-duplicados: {TIEMPO_REPETICION_MINUTOS} min.\n--------------------------------------------------")
 
     while True:
