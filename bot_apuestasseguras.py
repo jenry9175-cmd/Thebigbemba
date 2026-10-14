@@ -12,22 +12,29 @@ ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8808039850:AAEXLka-1dtmfDrhRqS9MPb0aAJ0Ez9bzQA")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "5098093220")
 
-# Definimos los deportes a monitorear de forma eficiente
+# Definimos los deportes a monitorear
 DEPORTES = [
     "soccer_epl",             # Fútbol (Premier League)
     "basketball_nba"          # Baloncesto (NBA)
 ]
 
-REGIONS = "eu"                # Región optimizada para gastar menos créditos
+REGIONS = "eu"                # Región optimizada para la API
 MARKETS = "h2h"               # Mercado directo para agilizar respuestas
 ODDS_FORMAT = "decimal"
 
+# Casas de apuestas totalmente operables para Venezuela (Cripto, USDT, Binance Pay, etc.)
 BOOKMAKERS_PERMITIDOS = [
-    "pinnacle", "betfair_ex_eu", "onexbet"
+    "pinnacle",         # Pinnacle (referencia global, acepta cripto)
+    "onexbet",          # 1xBet (pago móvil, Binance Pay, USDT)
+    "betfair_ex_eu",    # Betfair Exchange Europa
+    "marathonbet",      # Marathon Bet
+    "betonlineag",      # BetOnline (depósitos en cripto)
+    "mybookieag",       # MyBookie (depósitos en cripto)
+    "matchbook"         # Matchbook Exchange
 ]
 
 BANKROLL_SIMULACION = 100.0
-INTERVALO_MINUTOS = 30        # Intervalo equilibrado para cuidar créditos y mantener frescura
+INTERVALO_MINUTOS = 30        # Intervalo configurado a 30 minutos
 
 MARGEN_MINIMO_PORCENTYJE = 1.0  
 TIEMPO_REPETICION_MINUTOS = 120 
@@ -140,9 +147,7 @@ async def escanear_todos_los_deportes():
     for k in claves_a_borrar:
         del surebets_notificadas[k]
 
-    # Creamos la sesión HTTP asíncrona
     async with aiohttp.ClientSession() as session:
-        # Lanzamos todas las peticiones de los deportes AL MISMO TIEMPO
         tareas = [obtener_odds_deporte(session, sport) for sport in DEPORTES]
         resultados = await asyncio.gather(*tareas)
 
@@ -256,8 +261,8 @@ async def escanear_todos_los_deportes():
 # 6. BUCLE DE EJECUCIÓN 24/7 ASÍNCRONO
 # ---------------------------------------------------------
 async def main():
-    print("🤖 Bot asíncrono en la nube operativo y listo.")
-    print(f"🎯 Margen mínimo: {MARGEN_MINIMO_PORCENTYJE}% | Anti-duplicados: {TIEMPO_REPETICION_MINUTOS} min.\n--------------------------------------------------")
+    print("🤖 Bot asíncrono operativo para Venezuela.")
+    print(f"🎯 Margen mínimo: {MARGEN_MINIMO_PORCENTYJE}% | Intervalo: {INTERVALO_MINUTOS} min.\n--------------------------------------------------")
 
     while True:
         hora_actual = time.strftime("%H:%M:%S")
