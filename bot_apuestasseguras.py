@@ -2,37 +2,35 @@ import time
 import json
 import os
 from datetime import datetime
-import requests
+import asyncio
+import aiohttp
 
 # ---------------------------------------------------------
-# 1. CONFIGURACIÓN Y CREDENCIALES (Leyendo desde Railway de forma segura)
+# 1. CONFIGURACIÓN Y CREDENCIALES
 # ---------------------------------------------------------
 ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
-TELEGRAM_TOKEN = "8808039850:AAEXLka-1dtmfDrhRqS9MPb0aAJ0Ez9bzQA"
-TELEGRAM_CHAT_ID = "5098093220"
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8808039850:AAEXLka-1dtmfDrhRqS9MPb0aAJ0Ez9bzQA")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "5098093220")
 
+# Definimos los deportes a monitorear de forma eficiente
 DEPORTES = [
-    "soccer_epl",             # Premier League
-    "soccer_spain_la_liga",   # La Liga
-    "basketball_nba",         # NBA
-    "baseball_mlb",           # MLB
-    "tennis_atp"              # ATP Tenis
+    "soccer_epl",             # Fútbol (Premier League)
+    "basketball_nba"          # Baloncesto (NBA)
 ]
 
-REGIONS = "eu,us,uk"
-MARKETS = "h2h,totals,spreads" 
+REGIONS = "eu"                # Región optimizada para gastar menos créditos
+MARKETS = "h2h"               # Mercado directo para agilizar respuestas
 ODDS_FORMAT = "decimal"
 
 BOOKMAKERS_PERMITIDOS = [
-    "pinnacle", "betfair_ex_eu", "betfair_sb_uk", "onexbet",
-    "bet22", "marathonbet", "dafabet", "betcris", "matchbook"
+    "pinnacle", "betfair_ex_eu", "onexbet"
 ]
 
 BANKROLL_SIMULACION = 100.0
-INTERVALO_MINUTOS = 5        
+INTERVALO_MINUTOS = 30        # Intervalo equilibrado para cuidar créditos y mantener frescura
 
-MARGEN_MINIMO_PORCENTAJE = 1.0  
-TIEMPO_REPETICION_MINUTOS = 60  
+MARGEN_MINIMO_PORCENTYJE = 1.0  
+TIEMPO_REPETICION_MINUTOS = 120 
 
 CACHE_FILE = "surebets_cache.json"
 
@@ -85,28 +83,53 @@ def formatear_fecha(iso_string):
 
 
 # ---------------------------------------------------------
-# 3. MÓDULO DE NOTIFICACIONES
+# 3. MÓDULO DE NOTIFICACIONES ASÍNCRONO
 # ---------------------------------------------------------
-def enviar_alerta_telegram(mensaje):
+async def enviar_alerta_telegram(session, mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID, 
         "text": mensaje
     }
     try:
-        res = requests.post(url, json=payload, timeout=10)
-        if res.status_code != 200:
-            print(f"⚠️ Error al enviar a Telegram: {res.text}")
-        else:
-            print("✉️ ¡Alerta enviada con éxito a Telegram!")
+        async with session.post(url, json=payload, timeout=10) as res:
+            if res.status != 200:
+                texto = await res.text()
+                print(f"⚠️ Error al enviar a Telegram: {texto}")
+            else:
+                print("✉️ ¡Alerta enviada con éxito a Telegram!")
     except Exception as e:
         print(f"⚠️ Excepción de conexión con Telegram: {e}")
 
 
 # ---------------------------------------------------------
-# 4. ESCÁNER PRINCIPAL CON VALIDACIONES RIGUROSAS
+# 4. PETICIÓN INDIVIDUAL ASÍNCRONA A LA API
 # ---------------------------------------------------------
-def escanear_todos_los_deportes():
+async def obtener_odds_deporte(session, sport):
+    url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
+    params = {
+        "apiKey": ODDS_API_KEY,
+        "regions": REGIONS,
+        "markets": MARKETS,
+        "oddsFormat": ODDS_FORMAT
+    }
+    try:
+        async with session.get(url, params=params, timeout=15) as response:
+            if response.status == 200:
+                data = await response.json()
+                return sport, data
+            else:
+                print(f"⚠️ Error API en {sport}: Estado {response.status}")
+                return sport, []
+    except Exception as e:
+        print(f"❌ Error de red ({sport}): {e}")
+        return sport, []
+
+
+# ---------------------------------------------------------
+# 5. ESCÁNER PRINCIPAL CONCURRENTE (EN PARALELO)
+# ---------------------------------------------------------
+async def escanear_todos_los_deportes():
     ahora = time.time()
     surebets_notificadas = cargar_cache()
     
@@ -117,147 +140,137 @@ def escanear_todos_los_deportes():
     for k in claves_a_borrar:
         del surebets_notificadas[k]
 
-    for sport in DEPORTES:
-        url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
-        params = {
-            "apiKey": ODDS_API_KEY,
-            "regions": REGIONS,
-            "markets": MARKETS,
-            "oddsFormat": ODDS_FORMAT
-        }
+    # Creamos la sesión HTTP asíncrona
+    async with aiohttp.ClientSession() as session:
+        # Lanzamos todas las peticiones de los deportes AL MISMO TIEMPO
+        tareas = [obtener_odds_deporte(session, sport) for sport in DEPORTES]
+        resultados = await asyncio.gather(*tareas)
 
-        try:
-            response = requests.get(url, params=params, timeout=15)
-        except Exception as e:
-            print(f"❌ Error de red ({sport}): {e}")
-            continue
+        for sport, eventos in resultados:
+            if not eventos:
+                continue
 
-        if response.status_code != 200:
-            continue
+            print(f"🔍 Procesando {len(eventos)} eventos en {sport} (concurrente)...")
 
-        eventos = response.json()
-        print(f"🔍 Escaneando {len(eventos)} eventos en {sport}...")
+            for evento in eventos:
+                equipo_local = evento.get("home_team", "Local")
+                equipo_visitante = evento.get("away_team", "Visitante")
+                fecha_cruda = evento.get("commence_time", "")
+                fecha_evento = formatear_fecha(fecha_cruda)
 
-        for evento in eventos:
-            equipo_local = evento.get("home_team", "Local")
-            equipo_visitante = evento.get("away_team", "Visitante")
-            fecha_cruda = evento.get("commence_time", "")
-            fecha_evento = formatear_fecha(fecha_cruda)
+                bookmakers_datos = {}
 
-            bookmakers_datos = {}
+                for bookmaker in evento.get("bookmakers", []):
+                    casa = bookmaker["title"]
+                    casa_key = bookmaker["key"].lower()
 
-            for bookmaker in evento.get("bookmakers", []):
-                casa = bookmaker["title"]
-                casa_key = bookmaker["key"].lower()
+                    if BOOKMAKERS_PERMITIDOS and casa_key not in BOOKMAKERS_PERMITIDOS:
+                        continue
 
-                if BOOKMAKERS_PERMITIDOS and casa_key not in BOOKMAKERS_PERMITIDOS:
-                    continue
+                    if casa not in bookmakers_datos:
+                        bookmakers_datos[casa] = {}
 
-                if casa not in bookmakers_datos:
-                    bookmakers_datos[casa] = {}
+                    for market in bookmaker.get("markets", []):
+                        m_key = market["key"]
+                        if m_key not in bookmakers_datos[casa]:
+                            bookmakers_datos[casa][m_key] = {}
 
-                for market in bookmaker.get("markets", []):
-                    m_key = market["key"]
-                    if m_key not in bookmakers_datos[casa]:
-                        bookmakers_datos[casa][m_key] = {}
-
-                    for outcome in market.get("outcomes", []):
-                        nombre = outcome.get("name")
-                        punto = outcome.get("point")
-                        cuota = outcome.get("price")
-                        
-                        bookmakers_datos[casa][m_key][nombre] = {
-                            "cuota": cuota,
-                            "punto": punto
-                        }
-
-            mercados_globales = {}
-
-            for casa, mercados in bookmakers_datos.items():
-                for m_key, selecciones in mercados.items():
-                    for nombre, info in selecciones.items():
-                        punto = info["punto"]
-                        cuota = info["cuota"]
-
-                        if punto is not None:
-                            clave_unica = f"{m_key}_{punto}"
-                        else:
-                            clave_unica = m_key
-
-                        if clave_unica not in mercados_globales:
-                            mercados_globales[clave_unica] = {}
-
-                        if nombre not in mercados_globales[clave_unica] or cuota > mercados_globales[clave_unica][nombre]["cuota"]:
-                            mercados_globales[clave_unica][nombre] = {
+                        for outcome in market.get("outcomes", []):
+                            nombre = outcome.get("name")
+                            punto = outcome.get("point")
+                            cuota = outcome.get("price")
+                            
+                            bookmakers_datos[casa][m_key][nombre] = {
                                 "cuota": cuota,
-                                "casa": casa,
                                 "punto": punto
                             }
 
-            for clave_mercado, opciones in mercados_globales.items():
-                if len(opciones) in [2, 3]:
-                    cuotas_lista = [datos["cuota"] for datos in opciones.values()]
-                    casas_lista = [datos["casa"] for datos in opciones.values()]
-                    puntos_lista = [datos["punto"] for datos in opciones.values()]
+                mercados_globales = {}
 
-                    # Validar casas distintas
-                    if len(set(casas_lista)) == 1:
-                        continue
+                for casa, mercados in bookmakers_datos.items():
+                    for m_key, selecciones in mercados.items():
+                        for nombre, info in selecciones.items():
+                            punto = info["punto"]
+                            cuota = info["cuota"]
 
-                    # Validar hándicaps (spreads) estrictos
-                    if "spreads" in clave_mercado.lower():
-                        puntos_validos = [p for p in puntos_lista if p is not None]
-                        if len(puntos_validos) == 2:
-                            if sum(puntos_validos) != 0:
-                                continue
+                            clave_unica = f"{m_key}_{punto}" if punto is not None else m_key
 
-                    es_surebet, suma_imp, margen_teorico = calcular_surebet(cuotas_lista)
+                            if clave_unica not in mercados_globales:
+                                mercados_globales[clave_unica] = {}
 
-                    if es_surebet and margen_teorico >= MARGEN_MINIMO_PORCENTAJE:
-                        id_surebet = f"{sport}_{equipo_local}_{equipo_visitante}_{clave_mercado}"
-                        
-                        if id_surebet in surebets_notificadas:
+                            if nombre not in mercados_globales[clave_unica] or cuota > mercados_globales[clave_unica][nombre]["cuota"]:
+                                mercados_globales[clave_unica][nombre] = {
+                                    "cuota": cuota,
+                                    "casa": casa,
+                                    "punto": punto
+                                }
+
+                for clave_mercado, opciones in mercados_globales.items():
+                    if len(opciones) in [2, 3]:
+                        cuotas_lista = [datos["cuota"] for datos in opciones.values()]
+                        casas_lista = [datos["casa"] for datos in opciones.values()]
+                        puntos_lista = [datos["punto"] for datos in opciones.values()]
+
+                        if len(set(casas_lista)) == 1:
                             continue
 
-                        stakes, inversion, beneficio, roi = calcular_stakes_redondeados(
-                            BANKROLL_SIMULACION, cuotas_lista
-                        )
+                        if "spreads" in clave_mercado.lower():
+                            puntos_validos = [p for p in puntos_lista if p is not None]
+                            if len(puntos_validos) == 2 and sum(puntos_validos) != 0:
+                                continue
 
-                        if beneficio > 0:
-                            surebets_notificadas[id_surebet] = ahora
-                            guardar_cache(surebets_notificadas)
+                        es_surebet, suma_imp, margen_teorico = calcular_surebet(cuotas_lista)
 
-                            mensaje = f"🚨 SUREBET DETECTADA ({sport.upper()} - {clave_mercado.upper()}) (+{margen_teorico}%)\n\n"
-                            mensaje += f"🏆 Evento: {equipo_local} vs {equipo_visitante}\n"
-                            mensaje += f"📅 Fecha: {fecha_evento}\n"
-                            mensaje += f"📉 Inversa Total: {round(suma_imp, 4)}\n\n"
+                        if es_surebet and margen_teorico >= MARGEN_MINIMO_PORCENTYJE:
+                            id_surebet = f"{sport}_{equipo_local}_{equipo_visitante}_{clave_mercado}"
+                            
+                            if id_surebet in surebets_notificadas:
+                                continue
 
-                            for i, (opcion, datos) in enumerate(opciones.items()):
-                                punto_str = f" ({datos['punto']})" if datos['punto'] is not None else ""
-                                mensaje += f"• {opcion}{punto_str}: {datos['cuota']} @ {datos['casa']}\n"
-                                mensaje += f"  👉 Apostar: ${stakes[i]}\n"
+                            stakes, inversion, beneficio, roi = calcular_stakes_redondeados(
+                                BANKROLL_SIMULACION, cuotas_lista
+                            )
 
-                            mensaje += f"\n💵 Inversión Total: ${inversion}.00\n"
-                            mensaje += f"📈 Ganancia Neta: ${round(beneficio, 2)} ({round(roi, 2)}% ROI)\n"
+                            if beneficio > 0:
+                                surebets_notificadas[id_surebet] = ahora
+                                guardar_cache(surebets_notificadas)
 
-                            print(f"✨ Nueva Surebet real notificada: {equipo_local} vs {equipo_visitante} ({clave_mercado})")
-                            enviar_alerta_telegram(mensaje)
+                                mensaje = f"🚨 SUREBET DETECTADA ({sport.upper()} - {clave_mercado.upper()}) (+{margen_teorico}%)\n\n"
+                                mensaje += f"🏆 Evento: {equipo_local} vs {equipo_visitante}\n"
+                                mensaje += f"📅 Fecha: {fecha_evento}\n"
+                                mensaje += f"📉 Inversa Total: {round(suma_imp, 4)}\n\n"
 
-        time.sleep(2)
+                                for i, (opcion, datos) in enumerate(opciones.items()):
+                                    punto_str = f" ({datos['punto']})" if datos['punto'] is not None else ""
+                                    mensaje += f"• {opcion}{punto_str}: {datos['cuota']} @ {datos['casa']}\n"
+                                    mensaje += f"  👉 Apostar: ${stakes[i]}\n"
+
+                                mensaje += f"\n💵 Inversión Total: ${inversion}.00\n"
+                                mensaje += f"📈 Ganancia Neta: ${round(beneficio, 2)} ({round(roi, 2)}% ROI)\n"
+
+                                print(f"✨ Nueva Surebet real notificada: {equipo_local} vs {equipo_visitante} ({clave_mercado})")
+                                await enviar_alerta_telegram(session, mensaje)
 
 
 # ---------------------------------------------------------
-# 5. BUCLE DE EJECUCIÓN 24/7
+# 6. BUCLE DE EJECUCIÓN 24/7 ASÍNCRONO
 # ---------------------------------------------------------
-if __name__ == "__main__":
-    print("🤖 Bot en la nube operativo y listo.")
-    print(f"🎯 Margen mínimo: {MARGEN_MINIMO_PORCENTAJE}% | Anti-duplicados: {TIEMPO_REPETICION_MINUTOS} min.\n--------------------------------------------------")
+async def main():
+    print("🤖 Bot asíncrono en la nube operativo y listo.")
+    print(f"🎯 Margen mínimo: {MARGEN_MINIMO_PORCENTYJE}% | Anti-duplicados: {TIEMPO_REPETICION_MINUTOS} min.\n--------------------------------------------------")
 
     while True:
         hora_actual = time.strftime("%H:%M:%S")
-        print(f"\n[Ejecución {hora_actual}] Escaneando mercados...")
+        print(f"\n[Ejecución {hora_actual}] Escaneando mercados concurrentes...")
         
-        escanear_todos_los_deportes()
+        try:
+            await escanear_todos_los_deportes()
+        except Exception as e:
+            print(f"⚠️ Error en el ciclo: {e}")
         
         print(f"⏳ Esperando {INTERVALO_MINUTOS} minutos para la próxima revisión...")
-        time.sleep(INTERVALO_MINUTOS * 60)
+        await asyncio.sleep(INTERVALO_MINUTOS * 60)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+    
