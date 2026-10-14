@@ -6,7 +6,7 @@ import asyncio
 import aiohttp
 
 # ---------------------------------------------------------
-# 1. CONFIGURACIÓN Y CREDENCIALES
+# 1. CONFIGURACIÓN Y CREDENCIALES (OPTIMIZADA ANTI-FANTASMAS)
 # ---------------------------------------------------------
 ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8808039850:AAEXLka-1dtmfDrhRqS9MPb0aAJ0Ez9bzQA")
@@ -18,25 +18,23 @@ DEPORTES = [
     "basketball_nba"          # Baloncesto (NBA)
 ]
 
-REGIONS = "eu"                # Región optimizada para la API
+REGIONS = "eu,us"             # Regiones combinadas para capturar cuotas frescas globales
 MARKETS = "h2h"               # Mercado directo para agilizar respuestas
 ODDS_FORMAT = "decimal"
 
-# Casas de apuestas totalmente operables para Venezuela (Cripto, USDT, Binance Pay, etc.)
+# Casas de apuestas estables y operables (Filtradas para evitar desajustes fantasmas)
 BOOKMAKERS_PERMITIDOS = [
-    "pinnacle",         # Pinnacle (referencia global, acepta cripto)
-    "onexbet",          # 1xBet (pago móvil, Binance Pay, USDT)
-    "betfair_ex_eu",    # Betfair Exchange Europa
+    "pinnacle",         # Pinnacle (La referencia global de cuotas reales)
+    "onexbet",          # 1xBet (Muy activa y accesible en Venezuela)
     "marathonbet",      # Marathon Bet
-    "betonlineag",      # BetOnline (depósitos en cripto)
-    "mybookieag",       # MyBookie (depósitos en cripto)
-    "matchbook"         # Matchbook Exchange
+    "betonlineag"       # BetOnline (Sólida con cripto)
 ]
 
 BANKROLL_SIMULACION = 100.0
-INTERVALO_MINUTOS = 30        # Intervalo configurado a 30 minutos
+INTERVALO_MINUTOS = 30        
 
-MARGEN_MINIMO_PORCENTYJE = 1.0  
+# FILTRO ANTIFANTASMAS CLAVE: Margen mínimo más exigente (2.0%)
+MARGEN_MINIMO_PORCENTYJE = 2.0  
 TIEMPO_REPETICION_MINUTOS = 120 
 
 CACHE_FILE = "surebets_cache.json"
@@ -155,7 +153,7 @@ async def escanear_todos_los_deportes():
             if not eventos:
                 continue
 
-            print(f"🔍 Procesando {len(eventos)} eventos en {sport} (concurrente)...")
+            print(f"🔍 Procesando {len(eventos)} eventos en {sport} (antifantasmas)...")
 
             for evento in eventos:
                 equipo_local = evento.get("home_team", "Local")
@@ -226,6 +224,7 @@ async def escanear_todos_los_deportes():
 
                         es_surebet, suma_imp, margen_teorico = calcular_surebet(cuotas_lista)
 
+                        # Aquí se aplica el filtro estricto del 2.0%
                         if es_surebet and margen_teorico >= MARGEN_MINIMO_PORCENTYJE:
                             id_surebet = f"{sport}_{equipo_local}_{equipo_visitante}_{clave_mercado}"
                             
@@ -240,7 +239,7 @@ async def escanear_todos_los_deportes():
                                 surebets_notificadas[id_surebet] = ahora
                                 guardar_cache(surebets_notificadas)
 
-                                mensaje = f"🚨 SUREBET DETECTADA ({sport.upper()} - {clave_mercado.upper()}) (+{margen_teorico}%)\n\n"
+                                mensaje = f"🚨 SUREBET REAL DETECTADA ({sport.upper()} - {clave_mercado.upper()}) (+{margen_teorico}%)\n\n"
                                 mensaje += f"🏆 Evento: {equipo_local} vs {equipo_visitante}\n"
                                 mensaje += f"📅 Fecha: {fecha_evento}\n"
                                 mensaje += f"📉 Inversa Total: {round(suma_imp, 4)}\n\n"
@@ -253,7 +252,7 @@ async def escanear_todos_los_deportes():
                                 mensaje += f"\n💵 Inversión Total: ${inversion}.00\n"
                                 mensaje += f"📈 Ganancia Neta: ${round(beneficio, 2)} ({round(roi, 2)}% ROI)\n"
 
-                                print(f"✨ Nueva Surebet real notificada: {equipo_local} vs {equipo_visitante} ({clave_mercado})")
+                                print(f"✨ ¡Surebet real confirmada!: {equipo_local} vs {equipo_visitante} (+{margen_teorico}%)")
                                 await enviar_alerta_telegram(session, mensaje)
 
 
@@ -261,12 +260,12 @@ async def escanear_todos_los_deportes():
 # 6. BUCLE DE EJECUCIÓN 24/7 ASÍNCRONO
 # ---------------------------------------------------------
 async def main():
-    print("🤖 Bot asíncrono operativo para Venezuela.")
-    print(f"🎯 Margen mínimo: {MARGEN_MINIMO_PORCENTYJE}% | Intervalo: {INTERVALO_MINUTOS} min.\n--------------------------------------------------")
+    print("🤖 Bot antifantasmas operativo.")
+    print(f"🎯 Margen mínimo exigido: {MARGEN_MINIMO_PORCENTYJE}% | Regiones: {REGIONS}\n--------------------------------------------------")
 
     while True:
         hora_actual = time.strftime("%H:%M:%S")
-        print(f"\n[Ejecución {hora_actual}] Escaneando mercados concurrentes...")
+        print(f"\n[Ejecución {hora_actual}] Escaneando mercados limpios...")
         
         try:
             await escanear_todos_los_deportes()
@@ -278,4 +277,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
+        
