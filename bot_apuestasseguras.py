@@ -14,7 +14,7 @@ except Exception:
     ZONA_LOCAL = timezone(timedelta(hours=-4))
 
 # ---------------------------------------------------------
-# 1. CONFIGURACIÃ“N Y CREDENCIALES (OPTIMIZADA ANTI-FANTASMAS)
+# 1. CONFIGURACIÓN Y CREDENCIALES (OPTIMIZADA ANTI-FANTASMAS)
 # ---------------------------------------------------------
 ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8808039850:AAEXLka-1dtmfDrhRqS9MPb0aAJ0Ez9bzQA")
@@ -22,13 +22,13 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "5098093220")
 
 # Definimos los deportes a monitorear
 DEPORTES = [
-    "soccer_epl",             # FÃºtbol (Premier League)
+    "soccer_epl",             # Fútbol (Premier League)
     "basketball_nba"          # Baloncesto (NBA)
 ]
 
-# Se mantiene por compatibilidad con la API. Como abajo se envÃ­a tambiÃ©n el
-# parÃ¡metro "bookmakers", la API le da prioridad y el coste se calcula sobre
-# tus 4 casas (hasta 10 casas cuentan como 1 regiÃ³n), no sobre 2 regiones.
+# Se mantiene por compatibilidad con la API. Como abajo se envía también el
+# parámetro "bookmakers", la API le da prioridad y el coste se calcula sobre
+# tus 4 casas (hasta 10 casas cuentan como 1 región), no sobre 2 regiones.
 REGIONS = "eu,us"
 MARKETS = "h2h"               # Mercado directo para agilizar respuestas
 ODDS_FORMAT = "decimal"
@@ -38,27 +38,30 @@ BOOKMAKERS_PERMITIDOS = [
     "pinnacle",         # Pinnacle (La referencia global de cuotas reales)
     "onexbet",          # 1xBet (Muy activa y accesible en Venezuela)
     "marathonbet",      # Marathon Bet
-    "betonlineag"       # BetOnline (SÃ³lida con cripto)
+    "betonlineag"       # BetOnline (Sólida con cripto)
 ]
 
 BANKROLL_SIMULACION = 100.0
-INTERVALO_MINUTOS = 30
+# Cada escaneo cuesta 2 créditos (1 por deporte). Con 1 minuto se gastan unos
+# 2.880 créditos al día (~86.000 al mes), así que necesitas un plan de pago.
+# Con el plan gratuito (500 créditos/mes) súbelo a 180.
+INTERVALO_MINUTOS = 1
 
-# FILTRO ANTIFANTASMAS CLAVE: Margen mÃ­nimo mÃ¡s exigente (2.0%)
+# FILTRO ANTIFANTASMAS CLAVE: Margen mínimo más exigente (2.0%)
 MARGEN_MINIMO_PORCENTAJE = 2.0
 TIEMPO_REPETICION_MINUTOS = 120
 
-# FILTRO DE FRESCURA: se descartan las cuotas cuyo "last_update" tenga mÃ¡s
-# de estos minutos al momento de recibirlas. AjÃºstalo viendo el resumen que
-# imprime el bot en cada ciclo (lÃ­nea "ðŸ“Š Resumen"): si casi todo se descarta
-# como "cuotas_viejas", sube el valor; si salen candidatas dudosas, bÃ¡jalo.
+# FILTRO DE FRESCURA: se descartan las cuotas cuyo "last_update" tenga más
+# de estos minutos al momento de recibirlas. Ajústalo viendo el resumen que
+# imprime el bot en cada ciclo (línea "📊 Resumen"): si casi todo se descarta
+# como "cuotas_viejas", sube el valor; si salen candidatas dudosas, bájalo.
 MAX_EDAD_CUOTA_MINUTOS = 5
 
 CACHE_FILE = "surebets_cache.json"
 
 
 # ---------------------------------------------------------
-# 2. FUNCIONES DE MEMORIA Y MATEMÃTICAS
+# 2. FUNCIONES DE MEMORIA Y MATEMÁTICAS
 # ---------------------------------------------------------
 def cargar_cache():
     if os.path.exists(CACHE_FILE):
@@ -74,7 +77,7 @@ def guardar_cache(cache):
         with open(CACHE_FILE, "w") as f:
             json.dump(cache, f)
     except Exception as e:
-        print(f"âš ï¸ Error guardando cachÃ©: {e}")
+        print(f"⚠️ Error guardando caché: {e}")
 
 def parse_iso(iso_string):
     """Convierte '2026-10-15T18:30:00Z' en un datetime con zona UTC."""
@@ -110,26 +113,26 @@ def calcular_stakes_redondeados(monto_total, cuotas, precision=1):
 def nombres_esperados(sport, m_key, local, visitante):
     """
     Resultados que DEBE tener un mercado completo. Si faltan (por ejemplo, sin
-    el empate en fÃºtbol), la suma de probabilidades serÃ­a engaÃ±osamente baja y
-    se detectarÃ­a una surebet falsa.
+    el empate en fútbol), la suma de probabilidades sería engañosamente baja y
+    se detectaría una surebet falsa.
     """
     if m_key == "h2h":
         nombres = {local, visitante}
         if sport.startswith("soccer"):
-            nombres.add("Draw")      # fÃºtbol = 3 resultados
+            nombres.add("Draw")      # fútbol = 3 resultados
         return nombres
     if m_key == "totals":
         return {"Over", "Under"}
     if m_key == "spreads":
         return {local, visitante}
-    return None                      # mercado desconocido: no se evalÃºa
+    return None                      # mercado desconocido: no se evalúa
 
 
 # ---------------------------------------------------------
-# 3. MÃ“DULO DE NOTIFICACIONES ASÃNCRONO
+# 3. MÓDULO DE NOTIFICACIONES ASÍNCRONO
 # ---------------------------------------------------------
 async def enviar_alerta_telegram(session, mensaje):
-    """Devuelve True solo si Telegram confirmÃ³ el envÃ­o."""
+    """Devuelve True solo si Telegram confirmó el envío."""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
@@ -140,17 +143,17 @@ async def enviar_alerta_telegram(session, mensaje):
         async with session.post(url, json=payload, timeout=timeout) as res:
             if res.status != 200:
                 texto = await res.text()
-                print(f"âš ï¸ Error al enviar a Telegram: {texto}")
+                print(f"⚠️ Error al enviar a Telegram: {texto}")
                 return False
-            print("âœ‰ï¸ Â¡Alerta enviada con Ã©xito a Telegram!")
+            print("✉️ ¡Alerta enviada con éxito a Telegram!")
             return True
     except Exception as e:
-        print(f"âš ï¸ ExcepciÃ³n de conexiÃ³n con Telegram: {e}")
+        print(f"⚠️ Excepción de conexión con Telegram: {e}")
         return False
 
 
 # ---------------------------------------------------------
-# 4. PETICIÃ“N INDIVIDUAL ASÃNCRONA A LA API
+# 4. PETICIÓN INDIVIDUAL ASÍNCRONA A LA API
 # ---------------------------------------------------------
 async def obtener_odds_deporte(session, sport):
     url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
@@ -167,7 +170,7 @@ async def obtener_odds_deporte(session, sport):
             restantes = response.headers.get("x-requests-remaining", "?")
             usadas = response.headers.get("x-requests-used", "?")
             ultima = response.headers.get("x-requests-last", "?")
-            print(f"ðŸ’³ {sport}: coste {ultima} | usados {usadas} | restantes {restantes}")
+            print(f"💳 {sport}: coste {ultima} | usados {usadas} | restantes {restantes}")
 
             if response.status == 200:
                 data = await response.json()
@@ -175,19 +178,19 @@ async def obtener_odds_deporte(session, sport):
 
             cuerpo = (await response.text())[:200]
             if response.status == 401:
-                print(f"âš ï¸ {sport}: API key invÃ¡lida o sin crÃ©ditos (401). {cuerpo}")
+                print(f"⚠️ {sport}: API key inválida o sin créditos (401). {cuerpo}")
             elif response.status == 429:
-                print(f"âš ï¸ {sport}: lÃ­mite de peticiones alcanzado (429). {cuerpo}")
+                print(f"⚠️ {sport}: límite de peticiones alcanzado (429). {cuerpo}")
             else:
-                print(f"âš ï¸ Error API en {sport}: Estado {response.status}. {cuerpo}")
+                print(f"⚠️ Error API en {sport}: Estado {response.status}. {cuerpo}")
             return sport, []
     except Exception as e:
-        print(f"âŒ Error de red ({sport}): {e}")
+        print(f"❌ Error de red ({sport}): {e}")
         return sport, []
 
 
 # ---------------------------------------------------------
-# 5. LÃ“GICA DE DETECCIÃ“N (separada para poder probarla sin red)
+# 5. LÓGICA DE DETECCIÓN (separada para poder probarla sin red)
 # ---------------------------------------------------------
 def recolectar_mercados(evento, ahora_dt, stats):
     """
@@ -225,13 +228,13 @@ def recolectar_mercados(evento, ahora_dt, stats):
                 punto = outcome.get("point")
                 cuota = outcome.get("price")
 
-                # Una cuota decimal vÃ¡lida es un nÃºmero mayor que 1
+                # Una cuota decimal válida es un número mayor que 1
                 if not isinstance(cuota, (int, float)) or cuota <= 1:
                     continue
 
                 # --- Clave del mercado ---
                 if m_key == "spreads":
-                    # Se agrupa por el hÃ¡ndicap del equipo LOCAL: "Local -1.5" y
+                    # Se agrupa por el hándicap del equipo LOCAL: "Local -1.5" y
                     # "Visitante +1.5" caen en la misma clave y se comparan.
                     if punto is None or nombre not in (local, visitante):
                         continue
@@ -259,25 +262,25 @@ def recolectar_mercados(evento, ahora_dt, stats):
 
 def construir_mensaje(sport, clave_mercado, local, visitante, fecha_evento,
                       suma_imp, margen, opciones, stakes, inversion, beneficio, roi):
-    mensaje = f"ðŸš¨ SUREBET CANDIDATA ({sport.upper()} - {clave_mercado.upper()}) (+{margen}%)\n"
-    mensaje += "âš ï¸ Verifica las cuotas en cada casa antes de apostar.\n\n"
-    mensaje += f"ðŸ† Evento: {local} vs {visitante}\n"
-    mensaje += f"ðŸ“… Fecha (hora de Venezuela): {fecha_evento}\n"
-    mensaje += f"ðŸ“‰ Inversa Total: {round(suma_imp, 4)}\n\n"
+    mensaje = f"🚨 SUREBET CANDIDATA ({sport.upper()} - {clave_mercado.upper()}) (+{margen}%)\n"
+    mensaje += "⚠️ Verifica las cuotas en cada casa antes de apostar.\n\n"
+    mensaje += f"🏆 Evento: {local} vs {visitante}\n"
+    mensaje += f"📅 Fecha (hora de Venezuela): {fecha_evento}\n"
+    mensaje += f"📉 Inversa Total: {round(suma_imp, 4)}\n\n"
 
     for i, (opcion, datos) in enumerate(opciones.items()):
         punto_str = f" ({datos['punto']})" if datos["punto"] is not None else ""
-        mensaje += f"â€¢ {opcion}{punto_str}: {datos['cuota']} @ {datos['casa']}\n"
-        mensaje += f"  ðŸ•’ Cuota de hace {datos['edad_min']:.1f} min\n"
-        mensaje += f"  ðŸ‘‰ Apostar: ${stakes[i]:.2f}\n"
+        mensaje += f"• {opcion}{punto_str}: {datos['cuota']} @ {datos['casa']}\n"
+        mensaje += f"  🕒 Cuota de hace {datos['edad_min']:.1f} min\n"
+        mensaje += f"  👉 Apostar: ${stakes[i]:.2f}\n"
 
-    mensaje += f"\nðŸ’µ InversiÃ³n Total: ${inversion:.2f}\n"
-    mensaje += f"ðŸ“ˆ Ganancia Neta: ${round(beneficio, 2)} ({round(roi, 2)}% ROI)\n"
+    mensaje += f"\n💵 Inversión Total: ${inversion:.2f}\n"
+    mensaje += f"📈 Ganancia Neta: ${round(beneficio, 2)} ({round(roi, 2)}% ROI)\n"
     return mensaje
 
 
 def buscar_surebets_evento(sport, evento, ahora_dt, stats):
-    """Devuelve la lista de surebets candidatas de un evento (puede estar vacÃ­a)."""
+    """Devuelve la lista de surebets candidatas de un evento (puede estar vacía)."""
     stats["eventos"] += 1
 
     # --- Se descartan partidos ya iniciados o en vivo ---
@@ -296,7 +299,7 @@ def buscar_surebets_evento(sport, evento, ahora_dt, stats):
     for clave_mercado, mercado in mercados.items():
         opciones = mercado["opciones"]
 
-        # --- El mercado debe estar COMPLETO (3 resultados en fÃºtbol, 2 en NBA) ---
+        # --- El mercado debe estar COMPLETO (3 resultados en fútbol, 2 en NBA) ---
         esperados = nombres_esperados(sport, mercado["m_key"], local, visitante)
         if esperados is None or set(opciones.keys()) != esperados:
             stats["mercado_incompleto"] += 1
@@ -311,7 +314,7 @@ def buscar_surebets_evento(sport, evento, ahora_dt, stats):
 
         es_surebet, suma_imp, margen_teorico = calcular_surebet(cuotas_lista)
 
-        # AquÃ­ se aplica el filtro estricto del margen mÃ­nimo
+        # Aquí se aplica el filtro estricto del margen mínimo
         if not (es_surebet and margen_teorico >= MARGEN_MINIMO_PORCENTAJE):
             continue
 
@@ -335,7 +338,7 @@ def buscar_surebets_evento(sport, evento, ahora_dt, stats):
 
 
 # ---------------------------------------------------------
-# 6. ESCÃNER PRINCIPAL CONCURRENTE (EN PARALELO)
+# 6. ESCÁNER PRINCIPAL CONCURRENTE (EN PARALELO)
 # ---------------------------------------------------------
 async def escanear_todos_los_deportes():
     ahora = time.time()
@@ -354,14 +357,14 @@ async def escanear_todos_los_deportes():
         tareas = [obtener_odds_deporte(session, sport) for sport in DEPORTES]
         resultados = await asyncio.gather(*tareas)
 
-        # Hora de referencia para medir la edad de las cuotas reciÃ©n recibidas
+        # Hora de referencia para medir la edad de las cuotas recién recibidas
         ahora_dt = datetime.now(timezone.utc)
 
         for sport, eventos in resultados:
             if not eventos:
                 continue
 
-            print(f"ðŸ” Procesando {len(eventos)} eventos en {sport} (antifantasmas)...")
+            print(f"🔍 Procesando {len(eventos)} eventos en {sport} (antifantasmas)...")
 
             for evento in eventos:
                 # Un evento con datos raros ya no aborta todo el escaneo
@@ -369,7 +372,7 @@ async def escanear_todos_los_deportes():
                     candidatas = buscar_surebets_evento(sport, evento, ahora_dt, stats)
                 except Exception as e:
                     stats["errores_evento"] += 1
-                    print(f"âš ï¸ Error procesando un evento de {sport}: {e}")
+                    print(f"⚠️ Error procesando un evento de {sport}: {e}")
                     continue
 
                 for c in candidatas:
@@ -377,17 +380,17 @@ async def escanear_todos_los_deportes():
                         continue
 
                     stats["candidatas"] += 1
-                    print(f"âœ¨ Surebet candidata: {c['titulo']} (+{c['margen']}%)")
+                    print(f"✨ Surebet candidata: {c['titulo']} (+{c['margen']}%)")
 
-                    # Solo se marca como notificada si Telegram confirmÃ³ el envÃ­o
+                    # Solo se marca como notificada si Telegram confirmó el envío
                     if await enviar_alerta_telegram(session, c["mensaje"]):
                         surebets_notificadas[c["id"]] = ahora
                         guardar_cache(surebets_notificadas)
 
-    guardar_cache(surebets_notificadas)  # persiste tambiÃ©n la limpieza de claves viejas
+    guardar_cache(surebets_notificadas)  # persiste también la limpieza de claves viejas
 
     print(
-        "ðŸ“Š Resumen: "
+        "📊 Resumen: "
         f"eventos={stats['eventos']} | en_vivo_omitidos={stats['en_vivo']} | "
         f"cuotas_viejas={stats['cuotas_viejas']} | sin_timestamp={stats['sin_timestamp']} | "
         f"mercados_incompletos={stats['mercado_incompleto']} | "
@@ -396,30 +399,30 @@ async def escanear_todos_los_deportes():
 
 
 # ---------------------------------------------------------
-# 7. BUCLE DE EJECUCIÃ“N 24/7 ASÃNCRONO
+# 7. BUCLE DE EJECUCIÓN 24/7 ASÍNCRONO
 # ---------------------------------------------------------
 async def main():
     if not ODDS_API_KEY:
-        raise SystemExit("âŒ Falta la variable de entorno ODDS_API_KEY.")
+        raise SystemExit("❌ Falta la variable de entorno ODDS_API_KEY.")
 
-    print("ðŸ¤– Bot antifantasmas operativo.")
+    print("🤖 Bot antifantasmas operativo.")
     print(
-        f"ðŸŽ¯ Margen mÃ­nimo exigido: {MARGEN_MINIMO_PORCENTAJE}% | "
+        f"🎯 Margen mínimo exigido: {MARGEN_MINIMO_PORCENTAJE}% | "
         f"Casas: {', '.join(BOOKMAKERS_PERMITIDOS)} | "
-        f"Edad mÃ¡x. de cuota: {MAX_EDAD_CUOTA_MINUTOS} min\n"
+        f"Edad máx. de cuota: {MAX_EDAD_CUOTA_MINUTOS} min\n"
         "--------------------------------------------------"
     )
 
     while True:
         hora_actual = time.strftime("%H:%M:%S")
-        print(f"\n[EjecuciÃ³n {hora_actual}] Escaneando mercados limpios...")
+        print(f"\n[Ejecución {hora_actual}] Escaneando mercados limpios...")
 
         try:
             await escanear_todos_los_deportes()
         except Exception as e:
-            print(f"âš ï¸ Error en el ciclo: {e}")
+            print(f"⚠️ Error en el ciclo: {e}")
 
-        print(f"â³ Esperando {INTERVALO_MINUTOS} minutos para la prÃ³xima revisiÃ³n...")
+        print(f"⏳ Esperando {INTERVALO_MINUTOS} minutos para la próxima revisión...")
         await asyncio.sleep(INTERVALO_MINUTOS * 60)
 
 if __name__ == "__main__":
